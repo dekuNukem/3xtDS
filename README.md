@@ -6,3 +6,5 @@ The 3DS Streaming Console with External Control Interface, or 3xtDS in short, is
 Please see a short video of it in action: https://www.youtube.com/watch?v=9PZrJH7Z8KE
 
 I want to thank u/velocikoopa for providing a console for me to work on, without him this project would be impossible.
+
+Project gallery: http://imgur.com/a/ICxh5
