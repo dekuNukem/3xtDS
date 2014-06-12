@@ -18,13 +18,12 @@
 #define TOUCH_SCREEN_Y_SENSE_PIN 19
 #define C_PAD_X_PIN 21
 #define C_PAD_Y_PIN 22
-#define LEVEL_SHIFTER_POWER_PIN 20
 #define DEBUG_BUTTON_PIN 8
+#define LED_PIN 13
 #define C_PAD_DEFAULT_POTENTIAL 132
 #define DAC_9_BIT_1V8 279
 #define RECV_BUF_SIZE 64
-#define BUTTON_PRESSED HIGH
-#define BUTTON_RELEASED LOW
+#define BUTTON_PRESSED LOW
 #define MINIMAL_DELAY_MS 10
 
 char recv_buf[RECV_BUF_SIZE];
@@ -41,7 +40,9 @@ void setup()
 	analogReadResolution(10);
 	// PWM frequency at 90KHz
 	analogWriteFrequency(TOUCH_SCREEN_X_PIN, 90000);
-	analogWriteFrequency(LEVEL_SHIFTER_POWER_PIN, 90000);
+	pinMode(DEBUG_BUTTON_PIN, INPUT_PULLUP);
+	delay(1);
+	pinMode(LED_PIN, OUTPUT);
 	pinMode(BUTTON_A_PIN, OUTPUT);
 	pinMode(BUTTON_B_PIN, OUTPUT);
 	pinMode(BUTTON_X_PIN, OUTPUT);
@@ -56,17 +57,18 @@ void setup()
 	pinMode(BUTTON_SELECT_PIN, OUTPUT);
 	pinMode(BUTTON_HOME_PIN, OUTPUT);
 	button_release_all();
-	pinMode(TOUCH_SCREEN_X_PIN, OUTPUT);
-	pinMode(TOUCH_SCREEN_Y_PIN, OUTPUT);
 	pinMode(C_PAD_X_PIN, OUTPUT);
 	pinMode(C_PAD_Y_PIN, OUTPUT);
-	pinMode(LEVEL_SHIFTER_POWER_PIN, OUTPUT);
 	c_pad_reset();
-	analogWrite(LEVEL_SHIFTER_POWER_PIN, DAC_9_BIT_1V8);
-	button_click_delay_ms = 200;
-    c_pad_nudge_delay_ms = 200;
+	button_click_delay_ms = 250;
+    c_pad_nudge_delay_ms = 300;
     touch_screen_click_delay_ms = 100;
-    // don't change the order of following two lines
+    digitalWrite(LED_PIN, HIGH);
+    while(digitalRead(DEBUG_BUTTON_PIN) == HIGH)
+    	Serial.read();
+    digitalWrite(LED_PIN, LOW);
+    pinMode(TOUCH_SCREEN_X_PIN, OUTPUT);
+	pinMode(TOUCH_SCREEN_Y_PIN, OUTPUT);
     analogWrite(TOUCH_SCREEN_X_PIN, 0);
     disable_touch_screen();
 }
@@ -83,7 +85,7 @@ void loop()
 			int16_t arg2_pos = goto_next_arg(arg1_pos, recv_buf, RECV_BUF_SIZE);
 			int16_t x = atoi(recv_buf + arg1_pos);
 			int16_t y = atoi(recv_buf + arg2_pos);
-			c_pad_nudge(x, y, c);
+			c_pad_nudge(x, y, c_pad_nudge_delay_ms);
 		}
 		// c-pad hold: ch 127 240
 		if(strncmp(recv_buf, "ch ", 3) == 0)
@@ -134,7 +136,7 @@ void loop()
 		if(strncmp(recv_buf, "bh ", 3) == 0)
 		{
 			int16_t arg1_pos = goto_next_arg(0, recv_buf, RECV_BUF_SIZE);
-			button_hold(get_button_pin(recv_buf + arg1_pos));
+			button_press(get_button_pin(recv_buf + arg1_pos));
 		}
 		// button release: br a
 		if(strncmp(recv_buf, "br ", 3) == 0)
@@ -158,37 +160,38 @@ void loop()
 
 void button_click(int8_t button_pin, int16_t button_delay)
 {
-	digitalWrite(button_pin, BUTTON_PRESSED);
+	button_press(button_pin);
 	delay(button_delay);
-	digitalWrite(button_pin, BUTTON_RELEASED);
+	button_release(button_pin);
 	delay(20);
 }
 
-void button_hold(int8_t button_pin)
+void button_press(int8_t button_pin)
 {
+	pinMode(button_pin, OUTPUT);
 	digitalWrite(button_pin, BUTTON_PRESSED);
 }
 
 void button_release(int8_t button_pin)
 {
-	digitalWrite(button_pin, BUTTON_RELEASED);
+	pinMode(button_pin, INPUT);
 }
 
 void button_release_all()
 {
-	digitalWrite(BUTTON_A_PIN, BUTTON_RELEASED);
-	digitalWrite(BUTTON_B_PIN, BUTTON_RELEASED);
-	digitalWrite(BUTTON_X_PIN, BUTTON_RELEASED);
-	digitalWrite(BUTTON_Y_PIN, BUTTON_RELEASED);
-	digitalWrite(BUTTON_RIGHT_SHOULDER_PIN, BUTTON_RELEASED);
-	digitalWrite(BUTTON_LEFT_SHOULDER_PIN, BUTTON_RELEASED);
-	digitalWrite(BUTTON_UP_PIN, BUTTON_RELEASED);
-	digitalWrite(BUTTON_DOWN_PIN, BUTTON_RELEASED);
-	digitalWrite(BUTTON_LEFT_PIN, BUTTON_RELEASED);
-	digitalWrite(BUTTON_RIGHT_PIN, BUTTON_RELEASED);
-	digitalWrite(BUTTON_START_PIN, BUTTON_RELEASED);
-	digitalWrite(BUTTON_SELECT_PIN, BUTTON_RELEASED);
-	digitalWrite(BUTTON_HOME_PIN, BUTTON_RELEASED);
+	button_release(BUTTON_A_PIN);
+	button_release(BUTTON_B_PIN);
+	button_release(BUTTON_X_PIN);
+	button_release(BUTTON_Y_PIN);
+	button_release(BUTTON_RIGHT_SHOULDER_PIN);
+	button_release(BUTTON_LEFT_SHOULDER_PIN);
+	button_release(BUTTON_UP_PIN);
+	button_release(BUTTON_DOWN_PIN);
+	button_release(BUTTON_LEFT_PIN);
+	button_release(BUTTON_RIGHT_PIN);
+	button_release(BUTTON_START_PIN);
+	button_release(BUTTON_SELECT_PIN);
+	button_release(BUTTON_HOME_PIN);
 }
 
 int32_t goto_next_arg(int16_t current_pos, char* buf, int16_t size)
@@ -229,10 +232,7 @@ int8_t get_serial_command(char buf[], int16_t size)
 
 void c_pad_nudge(uint16_t x, uint16_t y, int16_t duration_ms)
 {
-	if(x > 255 || y > 255)
-		return;
-	analogWrite(C_PAD_X_PIN, x);
-	analogWrite(C_PAD_Y_PIN, y);
+	c_pad_hold(x, y);
 	delay(duration_ms);
 	c_pad_reset();
 }
@@ -253,7 +253,7 @@ void c_pad_reset()
 
 void touch_screen_click(uint16_t x, uint16_t y, int16_t duration_ms)
 {
-	if(x > 320 || y > 240)
+	if(x <= 0 || y <= 0 || x > 320 || y > 240)
 		return;
 	int16_t x_potential = ((double)x / 320) * DAC_9_BIT_1V8;
 	int16_t y_potential = ((double)y / 240) * DAC_9_BIT_1V8;
@@ -274,6 +274,7 @@ void touch_screen_click(uint16_t x, uint16_t y, int16_t duration_ms)
 	}
 	disable_touch_screen();
 	analogWrite(TOUCH_SCREEN_X_PIN, 0);
+	delay(50);
 }
 
 
@@ -282,7 +283,7 @@ void disable_touch_screen()
 	analogWrite(TOUCH_SCREEN_Y_PIN, DAC_9_BIT_1V8);
 }
 
-// pull Y+ pin down to initialize touch sreen interrupt
+// pull Y+ pin low to initialize 3DS's touch interrupt
 void enable_touch_screen()
 {
 	analogWrite(TOUCH_SCREEN_Y_PIN, 0);
@@ -298,8 +299,10 @@ int8_t get_button_pin(char* buf)
 		return BUTTON_X_PIN;
 	if(strncmp(buf, "y\n", 2) == 0)
 		return BUTTON_Y_PIN;
+	// right shoulder
 	if(strncmp(buf, "rs\n", 3) == 0)
 		return BUTTON_RIGHT_SHOULDER_PIN;
+	// left shoulder
 	if(strncmp(buf, "ls\n", 3) == 0)
 		return BUTTON_LEFT_SHOULDER_PIN;
 	if(strncmp(buf, "u\n", 2) == 0)
@@ -310,10 +313,13 @@ int8_t get_button_pin(char* buf)
 		return BUTTON_LEFT_PIN;
 	if(strncmp(buf, "r\n", 2) == 0)
 		return BUTTON_RIGHT_PIN;
+	// start
 	if(strncmp(buf, "st\n", 3) == 0)
 		return BUTTON_START_PIN;
+	// select
 	if(strncmp(buf, "sl\n", 3) == 0)
 		return BUTTON_SELECT_PIN;
+	// home
 	if(strncmp(buf, "h\n", 2) == 0)
 		return BUTTON_HOME_PIN;
 	else
