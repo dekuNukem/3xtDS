@@ -20,7 +20,7 @@
 #define C_PAD_Y_PIN 22
 #define DEBUG_BUTTON_PIN 8
 #define LED_PIN 13
-#define C_PAD_DEFAULT_POTENTIAL 132
+#define C_PAD_DEFAULT_POTENTIAL 140
 #define DAC_9_BIT_1V8 279
 #define RECV_BUF_SIZE 64
 #define BUTTON_PRESSED LOW
@@ -61,7 +61,7 @@ void setup()
 	pinMode(C_PAD_Y_PIN, OUTPUT);
 	c_pad_reset();
 	button_click_delay_ms = 250;
-    c_pad_nudge_delay_ms = 300;
+    c_pad_nudge_delay_ms = 500;
     touch_screen_click_delay_ms = 100;
     digitalWrite(LED_PIN, HIGH);
     while(digitalRead(DEBUG_BUTTON_PIN) == HIGH)
@@ -255,9 +255,12 @@ void touch_screen_click(uint16_t x, uint16_t y, int16_t duration_ms)
 {
 	if(x <= 0 || y <= 0 || x > 320 || y > 240)
 		return;
-	int16_t x_potential = ((double)x / 320) * DAC_9_BIT_1V8;
-	int16_t y_potential = ((double)y / 240) * DAC_9_BIT_1V8;
+	int16_t x_potential = ((double)x / 320) * 320;
+	int16_t y_potential = ((double)y / 240) * 320;
 	
+	y_potential -= (((double)(y_potential)) * 0.257 - 29);
+	x_potential -= (((double)(x_potential)) * 0.066 - 7);
+
 	analogWrite(TOUCH_SCREEN_X_PIN, x_potential);
 	enable_touch_screen();
 	int32_t start = millis();
@@ -276,7 +279,6 @@ void touch_screen_click(uint16_t x, uint16_t y, int16_t duration_ms)
 	analogWrite(TOUCH_SCREEN_X_PIN, 0);
 	delay(50);
 }
-
 
 void disable_touch_screen()
 {
